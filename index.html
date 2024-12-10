@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<!-- me -->
+		<title>sophie's blog</title>
+
+		<!-- highlight.js -->
+		<link rel="stylesheet" href="lib/styles/default.min.css">
+		<script src="lib/highlight.min.js"></script>
+		<script type="importmap">
+{
+	"imports": {
+		"@highlightjs": "./lib/es/"
+	}
+}
+		</script>
+		<script src="load_hightlight.js"></script>
+
+		<style>
+			body {
+				display: grid;
+				grid-template: min-content;
+				max-width: 75em;
+				margin: auto;
+				background-color: rgb(22, 22, 24);
+				color: rgb(240, 240, 245);
+			}
+
+			h1,h2,h3,h4,h5,h6,p {
+				font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+			}
+
+			h1, a {
+				color: hsl(304, 100%, 60%);
+				text-decoration: none;
+			}
+		</style>
+
+	</head>
+	<body>
+
+		<h1>
+			<a href="#blog_12_9_2024">
+				9 December 2024 - Coral Engine
+			</a>
+		</h1>
+
+		<p>
+			Hello! :]<br>
+			Welcome to my custom little blog, I made this to showcase my new stuff I work on for anybody who cares enough to see!<br>
+			The main thing I've been working on for the past 6-ish months is Coral, my very own game engine written from scratch* in C++! It's been a MASSIVE undertaking and I've learned an unbelievable amount of things about hardware, low-level engineering, compilers, and more. This blog post will cover the recent progress, and I many of the things already achieved.<br>
+			<h5 style="font-style: italic; font-weight: 400;">* I've had help from several friends and used code from various resources, and I utilize the following libraries: qt6, jolt, glad, glfw3, glm, rapidxml, stb_image, stb_image_write, and miniaudio</h5>
+		</p>
+
+		<h2>Multithreading</h2>
+		<p>Multithreading is fully implemented in Coral, this runs (as far as I am able to tell) flawlessly! The only thing I plan to change is thread grouping to prevent any possible deadlocks if two components want to lock each other on different threads. Threading is currently grouped by entity, so 1 entity will hold all the components tasks on one thread, this is because components are far more likely to use each other than entities.</p>
+
+		<h2>Lockguard</h2>
+		Coral uses a custom RAII-style lock guard class <code class="language-cpp">SmartLock&lt;T&gt;</code> that utilizes a wrapper interface <code>Lockable</code> to get the mutex off an entity rather than expose the mutex publicly.
+
+		<h3>Rendering & Multithreading</h3>
+		The render pipeline is thread-safe, but it runs all on a single thread (because OpenGL only likes one thread per context) but it safely locks entities and components as needed, it doesn't hold onto the lock for long! This is so we are letting all the tasks flow while we calculate any math we have to between render passes, some examples are below!
+
+		<pre><code class="language-cpp">
+void RenderDriver::_gbuffer_write()
+{
+	// (Ommitted)
+	for (auto& entity : this->draw_queue)
+	{
+		// SmartLock&lt;T&gt; is like std::lock_guard&lt;T&gt; but it works with our wrapper class Coral::Lockable, which defines a mutex within the struct
+		SmartLock&lt;Entity&gt; lock(entity);
+		entity->draw(Scene::RENDER_FLAG_DEFERRED_PASS, write_gbuffer);
+		write_gbuffer->reset_texture_count();
+	}
+	// (Ommitted)
+}
+		</code></pre>
+		<br>
+		<pre><code class="language-cpp">
+// Adds an entity to our draw queue.
+FORCEINLINE void RenderDriver::_propagate_entity(const Ref&lt;Scene::Entity&gt;&amp; p_entity)
+{
+	bool should_draw = false;
+	List&lt;WeakPtr&lt;Entity&gt;&gt; children;
+	{ // Lock aquired
+		SmartLock&lt;Entity&gt; lock(p_entity);
+		should_draw = p_entity->should_draw();
+		if (should_draw)
+			children = p_entity->get_children();
+	} // Lock is released here
+	if (should_draw)
+	{
+		draw_queue.push_back(p_entity);
+	}
+
+	for (auto& child : children)
+	{
+		if (child.expired())
+			continue;
+                // child.lock() is not like locking a mutex, it turns a WeakPtr into a Ref
+		_propagate_entity(child.lock());
+	}
+}
+		</code></pre>
+		<h2>Rendering!</h2>
+		<p>
+			Rendering has been... frustrating! I'm really inexperienced with this sort of stuff so it's been a whole lot of trial and error and stupid fuckups on my part.
+			I also work across 3 different devices, my school laptop that uses intel integrated graphics, my home laptop that has an NVIDIA 40-series GPU,
+			and my desktop with a NVIDIA 30-series GPU, and they sometimes will each emit a different error!<br><br>
+			I have since learned that this is the result of different hardware implementations of the OpenGL standard, which means that most computers differ in the
+			exact implementation of the graphics libraries. In most cases, the more popular the GPU, the less likely it is to fail you, even if the developer is doing things wrong!
+			I had an instance where my home laptop and desktop would work fine, but my school laptop encountered a million errors.<br><br>
+			That shit will drive you up a wall, and will make you want to give up and quit, but when you persevere, the dopamine rush is better than cocaine.
+		</p>
+
+		<h2>
+			Thanks for reading!
+		</h2>
+		<p>
+			Thank you if you read all this, I appreciate it and I'll try to update this soon!
+			<br>
+			&nbsp;&nbsp;&nbsp;&nbsp;- Sophie
+		</p>
+
+		<script>
+			hljs.highlightAll();
+		</script>
+
+	</body>
+</html>
